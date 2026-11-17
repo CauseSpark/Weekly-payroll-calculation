@@ -45,7 +45,7 @@ public class Main {
     public static void main(String[] args) {
 
         // A growable list holding one Employee record per worker.
-        ArrayList<Employee> staff = new ArrayList<Employee>();
+        ArrayList<Employee> staff = new ArrayList<>();
 
         // The file where the finished payroll report will be saved.
         File logFile = new File("payroll_log.txt");
@@ -61,11 +61,14 @@ public class Main {
 
         // --------------------------------------------------------------
         // STEP 1: Find out how many employees we are processing.
-        // readWholeNumber() refuses to move on until a sensible number is
-        // given, so a typing mistake cannot crash the program.
+        // readNumber() refuses to move on until a sensible number is
+        // given, so a typing mistake cannot crash the program. The "true"
+        // at the end asks for a whole number, since nobody employs half
+        // a person.
         // --------------------------------------------------------------
-        int employeeCount = readWholeNumber(
-                "How many employees are on this payroll?: ");
+        int employeeCount = (int) readNumber(
+                "How many employees are on this payroll?: ",
+                0, Integer.MAX_VALUE, true);
 
         // --------------------------------------------------------------
         // STEP 2: Collect the details for each employee, one at a time.
@@ -90,8 +93,8 @@ public class Main {
 
             // Ask for the hourly rate, rejecting anything that is not a
             // sensible amount of money.
-            double rate = readDecimalNumber(
-                    "Enter hourly pay rate (e.g. 18.50): $", 0.0, 1000.0);
+            double rate = readNumber(
+                    "Enter hourly pay rate (e.g. 18.50): $", 0.0, 1000.0, false);
 
             // Create the record that holds everything about this worker.
             Employee worker = new Employee(name.trim(), rate);
@@ -101,8 +104,8 @@ public class Main {
             // "less than or equal to": the day slots are numbered 0 to 6,
             // so asking for slot 7 would be asking for a day not there.
             for (int d = 0; d < DAYS_IN_WEEK; d++) {
-                double hours = readDecimalNumber(
-                        "  Hours worked on " + days[d] + ": ", 0.0, 24.0);
+                double hours = readNumber(
+                        "  Hours worked on " + days[d] + ": ", 0.0, 24.0, false);
                 worker.addHours(hours);
             }
 
@@ -210,62 +213,44 @@ public class Main {
         input.close();
     }
 
-    /* Asks a question and waits for a whole number of zero or more. If
-     * letters, symbols, or a negative number are typed, it explains the
-     * problem and asks again instead of stopping the program. */
-    static int readWholeNumber(String question) {
-        int value = 0;
-        boolean valid = false;
-
-        // Keep looping for as long as we do not yet have a good answer.
-        while (!valid) {
+    /* Asks a question and waits for a number between a smallest and a
+     * largest allowed value. If letters, symbols, or a number outside that
+     * range are typed, it explains the problem and asks again instead of
+     * stopping the program.
+     *
+     * One method serves all three questions the program asks. The employee
+     * count must be a whole number, so "wholeOnly" is true for it; pay
+     * rates and daily hours may be decimals, so it is false for them. */
+    static double readNumber(String question, double min, double max,
+                             boolean wholeOnly) {
+        // Keep looping until a good answer is returned from inside.
+        while (true) {
             try {
                 System.out.print(question);
-                value = input.nextInt();
+                double value = wholeOnly ? input.nextInt()
+                                         : input.nextDouble();
+                boolean inRange = value >= min && value <= max;
 
-                if (value < 0) {
-                    System.out.println("  >> Enter zero or more.");
-                } else {
-                    valid = true; // answer accepted, so stop looping
+                if (!inRange) {
+                    System.out.println(wholeOnly
+                            ? "  >> Enter zero or more."
+                            : "  >> Enter a number between "
+                                    + min + " and " + max + ".");
                 }
                 // Clear the leftover "Enter" keypress from the buffer.
                 // Without this, the next question that reads a line of
                 // text grabs that empty leftover instead of waiting.
                 input.nextLine();
-            } catch (InputMismatchException ex) {
-                System.out.println("  >> That is not a whole number.");
-                input.nextLine(); // discard the bad input
-            }
-        }
-        return value;
-    }
-
-    /* Asks a question and waits for a decimal number between a smallest
-     * and a largest allowed value. Used for both pay rates and daily
-     * hours, since both are decimals with a sensible range. */
-    static double readDecimalNumber(String question, double min,
-                                    double max) {
-        double value = 0.0;
-        boolean valid = false;
-
-        while (!valid) {
-            try {
-                System.out.print(question);
-                value = input.nextDouble();
-
-                if (value < min || value > max) {
-                    System.out.println("  >> Enter a number between "
-                            + min + " and " + max + ".");
-                } else {
-                    valid = true;
+                if (inRange) {
+                    return value; // answer accepted, so stop looping
                 }
-                input.nextLine(); // clear the leftover keypress
             } catch (InputMismatchException ex) {
-                System.out.println("  >> That is not a valid number.");
+                System.out.println(wholeOnly
+                        ? "  >> That is not a whole number."
+                        : "  >> That is not a valid number.");
                 input.nextLine(); // discard the bad input
             }
         }
-        return value;
     }
 }
 
@@ -317,13 +302,11 @@ class Employee {
     }
 
     /* Returns the hours paid at the normal rate. Anything up to the
-     * 40-hour threshold is regular time. Someone who worked 52 hours
-     * still has only 40 regular hours; the rest counts as overtime. */
+     * 40-hour threshold is regular time. Math.min picks the smaller of
+     * the two numbers, so someone who worked 52 hours still has only 40
+     * regular hours; the rest counts as overtime. */
     public double getRegularHours() {
-        if (getTotalHours() > Main.OVERTIME_THRESHOLD) {
-            return Main.OVERTIME_THRESHOLD;
-        }
-        return getTotalHours();
+        return Math.min(getTotalHours(), Main.OVERTIME_THRESHOLD);
     }
 
     /* Returns the hours paid at the higher overtime rate. Math.max is
